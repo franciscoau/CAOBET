@@ -173,6 +173,7 @@ th{color:var(--green2)}
 
 <section class="admin card" id="adminPanel">
   <h2>🔐 Panel del organizador</h2>
+  <div class="notice" id="adminDiagnostic">Pulsa “Actualizar apuestas” para consultar Google Sheets.</div>
   <div class="stats">
     <div class="stat"><span>Apuestas</span><b id="stBets">0</b></div>
     <div class="stat"><span>Pozo acumulado</span><b id="stPoints">$0</b></div>
@@ -211,7 +212,7 @@ const CONFIG = {
   // Ejemplo: "2026-07-23T19:00:00-04:00"
   closingDate: "",
   // Pega aquí la URL de tu Google Apps Script desplegado como aplicación web.
-  googleScriptUrl: ""
+  googleScriptUrl: "https://script.google.com/macros/s/AKfycbyjFWqU4uurh2Dy8eG6-KcN4mJtdMhcAbnRQhfVtyLnRmiLS0zVmVtdiKAK1qUpXl5q/exec"
 };
 
 const WINNER_ODDS = {Jalones: 1.95, Empate: 3.60, Coipa: 2.10};
@@ -298,42 +299,81 @@ function loginAdmin(){
 }
 
 
-async function refreshAdmin(){
+function refreshAdmin(){
   const notice = document.getElementById("dataSourceNotice");
 
   if(!CONFIG.googleScriptUrl){
     adminBetsCache = null;
-    notice.textContent = "Mostrando solo apuestas de este dispositivo. Conecta Google Sheets para ver las apuestas de todos.";
+    notice.textContent = "No hay una URL de Google Apps Script configurada. Se muestran solo las apuestas de este dispositivo.";
     updateAdmin();
     return;
   }
 
-  notice.textContent = "Cargando apuestas desde Google Sheets…";
+  notice.textContent = "Cargando apuestas totales desde Google Sheets…";
 
-  try{
-    const sep = CONFIG.googleScriptUrl.includes("?") ? "&" : "?";
-    const res = await fetch(CONFIG.googleScriptUrl + sep + "action=list&ts=" + Date.now(), {cache:"no-store"});
-    const data = await res.json();
+  const oldScript = document.getElementById("caobetJsonp");
+  if(oldScript) oldScript.remove();
 
-    if(!data.ok || !Array.isArray(data.bets)){
-      throw new Error(data.error || "Respuesta inválida");
+  const callbackName = "receiveCaoaBets_" + Date.now();
+
+  const timeout = setTimeout(() => {
+    cleanup();
+    adminBetsCache = null;
+    notice.textContent = "La conexión con Google Sheets tardó demasiado. Revisa que la implementación sea pública y que la URL termine en /exec.";
+    updateAdmin();
+    toast("No se pudieron cargar las apuestas totales");
+  }, 12000);
+
+  function cleanup(){
+    clearTimeout(timeout);
+    const script = document.getElementById("caobetJsonp");
+    if(script) script.remove();
+    try { delete window[callbackName]; } catch(e) { window[callbackName] = undefined; }
+  }
+
+  window[callbackName] = function(data){
+    cleanup();
+
+    if(!data || !data.ok || !Array.isArray(data.bets)){
+      adminBetsCache = null;
+      notice.textContent = "Google Sheets respondió, pero no entregó una lista válida de apuestas.";
+      updateAdmin();
+      toast("Respuesta inválida de Google Sheets");
+      return;
     }
 
     adminBetsCache = data.bets;
-    notice.textContent = "Apuestas centralizadas cargadas: " + data.bets.length + ".";
+    notice.textContent = "Apuestas totales cargadas desde Google Sheets: " + data.bets.length + ".";
     updateAdmin();
-    toast("Apuestas actualizadas");
-  }catch(err){
-    console.error(err);
+    toast("Apuestas totales actualizadas");
+  };
+
+  const separator = CONFIG.googleScriptUrl.includes("?") ? "&" : "?";
+  const script = document.createElement("script");
+  script.id = "caobetJsonp";
+  script.src = CONFIG.googleScriptUrl + separator +
+    "action=list&callback=" + encodeURIComponent(callbackName) +
+    "&ts=" + Date.now();
+
+  script.onerror = function(){
+    cleanup();
     adminBetsCache = null;
-    notice.textContent = "No se pudo conectar con Google Sheets. Se muestran solo las apuestas de este dispositivo.";
+    notice.textContent = "No fue posible abrir Google Apps Script. Confirma que el acceso esté configurado como “Cualquier persona”.";
     updateAdmin();
-    toast("Error al cargar Google Sheets");
-  }
+    toast("Error de conexión con Google Sheets");
+  };
+
+  document.body.appendChild(script);
 }
 
 function updateAdmin(){
   const bets=getBets();
+  const diagnostic = document.getElementById("adminDiagnostic");
+  if(diagnostic){
+    diagnostic.textContent = adminBetsCache !== null
+      ? "Fuente actual: Google Sheets · " + bets.length + " apuestas centralizadas."
+      : "Fuente actual: este dispositivo · " + bets.length + " apuestas locales.";
+  }
   document.getElementById("stBets").textContent=bets.length;
   document.getElementById("stPoints").textContent=money(bets.reduce((a,b)=>a+(Number(b.amount)||0),0));
   const fav=mode(bets.map(b=>b.winner)); document.getElementById("stFav").textContent=fav||"—";
