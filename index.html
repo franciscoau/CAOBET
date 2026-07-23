@@ -216,7 +216,7 @@ const WINNER_ODDS = {Jalones: 1.95, Empate: 3.60, Coipa: 2.10};
 const money = n => new Intl.NumberFormat("es-CL", {style:"currency", currency:"CLP", maximumFractionDigits:0}).format(Number(n)||0);
 
 const jalones = ["Papa","Poblete","Pooley","Mauro","Jofre","Yáñez U","Mono Castillo","Álvarez","Richo","Gálvez","Neira"];
-const coipa = ["Cocio","Avaria","Martínez","Navarrete","Reynalde","Fernandois","Checho Rubilar","Ríos","Gamboa","Caro","Orellana"];
+const coipa = ["Cocio","Avaria","Martínez","Navarrete","Reynalde","Fernandois","Rubilar","Ríos","Gamboa","Caro","Orellana"];
 const allPlayers = [...jalones.map(x=>"Jalones — "+x), ...coipa.map(x=>"Coipa — "+x)];
 let selectedPick = "";
 let isClosed = localStorage.getItem("caobet_closed")==="1";
